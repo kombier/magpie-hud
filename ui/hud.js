@@ -292,7 +292,7 @@
     if (groups.length) model.classList.add('has-route-groups');
     const modelName = document.createElement('span');
     modelName.className = 'card-model-name';
-    modelName.textContent = /^(正在选择账号|正在选择模型|模型待定)$/.test(card.model) ? '正在选路' : card.model;
+    modelName.textContent = /^(正在选择账号|正在选择模型|模型待定)$/.test(card.model) ? '正在选路' : window.hudModelNames.display(card.model);
     model.append(chain, modelName);
     model.title = [...groups, card.model].join(' → ');
     if (groups.length) {
@@ -883,7 +883,7 @@
     sessions.flatMap(session => [...(session.quotaRoutes || []), ...session.routes, ...(session.subagents || [])]).forEach(card => {
       const key = JSON.stringify([card.provider.toLowerCase(), card.account]);
       if (!accounts.has(key)) accounts.set(key, { card, models: new Set() });
-      accounts.get(key).models.add(card.model);
+      accounts.get(key).models.add(window.hudModelNames.display(card.model));
     });
     const entries = [];
     const readings = [];

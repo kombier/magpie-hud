@@ -118,7 +118,7 @@
   }
   function decisionLabel(rule) {
     if (!rule) return '';
-    const model = (rule.classifier || '').split('/').at(-1);
+    const model = window.hudModelNames.display((rule.classifier || '').split('/').at(-1));
     if (rule.state === 'held') return model ? `沿用 ${model}` : '沿用轮初';
     if (rule.state === 'missing') return '轮初判定缺失';
     if (model) return rule.cached ? `${model} · 缓存` : model;
@@ -181,7 +181,7 @@
       const activity = last && active(view) && !view.turnContinuation ? (view.waitReason || (['slot', 'rpm'].includes(phase) ? phase : phase === 'upstream' ? 'upstream' : 'unknown')) : '';
       const summary = view.turnContinuation ? '本轮决策模型' : activity ? activity === 'upstream' ? '请求中' : waits[activity] || waits.unknown : states[attempt.state] || states.unknown;
       const chain = (attempt.groupChain || []).map(g => typeof g === 'string' ? g : g.name).filter(Boolean);
-      const item = step(`attempt:${ordinal}`, attempt.model || '模型未记录', `尝试${ordinal} · ${summary}`, `实际尝试 ${ordinal}`, [
+      const item = step(`attempt:${ordinal}`, window.hudModelNames.display(attempt.model) || '模型未记录', `尝试${ordinal} · ${summary}`, `实际尝试 ${ordinal}`, [
         `发送模型：${attempt.model || '未记录'}`, attempt.effort && `实际强度：${attempt.effort}`,
         `状态：${summary}`, chain.length && `已确认路径：${chain.join(' → ')}`,
         attempt.pathIncomplete && '后续组路径无法唯一确认',

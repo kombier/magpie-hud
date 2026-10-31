@@ -342,7 +342,7 @@
       cellOf(tr, intentText || '未记录', 'history-intent', [intentSourceNote[group.intentSource], group.ruleIntent || '实时判定意图未记录', sure].filter(Boolean).join('\n'));
       const groups = (group.routeGroups || []).join(' → ');
       cellOf(tr, groups || group.ruleTarget || '未记录', 'history-decision', [group.ruleTarget && `规则目标 ${group.ruleTarget}`, groups && `实际路径 ${groups}`].filter(Boolean).join('\n') || '规则判定未记录');
-      const models = group.models || [];
+      const models = [...new Set((group.models || []).map(window.hudModelNames.display))];
       cellOf(tr, models[0] || '—', 'history-model', models.length > 1 ? `组内模型\n${models.join('\n')}` : models[0] || '模型未记录');
       const efforts = group.efforts || [];
       effortOf(cellOf(tr, '', 'history-effort'), efforts[0]);
@@ -372,7 +372,7 @@
         cellOf(child, childIntent || '—', 'history-intent', [intentSourceNote[row.ruleFallback === 'previous' ? 'previous' : ''], row.ruleIntent, childSure].filter(Boolean).join('\n') || '该请求未触发分类');
         const childGroups = (row.routeGroups || []).join(' → ');
         cellOf(child, childGroups || row.ruleTarget || '—', 'history-decision', [row.ruleTarget && `规则目标 ${row.ruleTarget}`, childGroups && `实际路径 ${childGroups}`].filter(Boolean).join('\n') || '规则判定未记录');
-        const model = row.served || row.model || '—';
+        const model = window.hudModelNames.display(row.served || row.model) || '—';
         cellOf(child, model, 'history-model', [`发送模型 ${row.model || '未记录'}`, `响应报告模型 ${row.served || '未记录'}`, row.account && `账号 ${window.hudRedact.text(row.account)}`, row.provider && `供应商 ${row.provider}`].filter(Boolean).join('\n'));
         effortOf(cellOf(child, '', 'history-effort'), row.effort);
         cellOf(child, compact(row.tokens), 'history-number', `最终日志条目 Token ${number(row.tokens)}\n输入 ${number(row.input)} · 输出 ${number(row.output)} · 缓存读取 ${number(row.cacheRead)}`);

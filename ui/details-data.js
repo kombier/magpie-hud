@@ -1,6 +1,8 @@
 'use strict';
 // 与 UI 无关的聚合函数；比率由累计量计算，费用来自精确匹配的逐请求定价。
 (() => {
+  const modelNames = typeof module !== 'undefined' ? require('./model-names.js') : window.hudModelNames;
+  const dimension = (row, key) => key === 'model' ? modelNames.display(row[key]) : row[key];
   const costIndexes = new WeakMap();
   function costIndex(costs) {
     if (!costIndexes.has(costs)) {
@@ -41,10 +43,10 @@
   }
   function filter(rows, filters, session = '', cycle = null) {
     return rows.filter(r => (!session || r.session === session)
-      && Object.entries(filters).every(([key, values]) => !values.size || values.has(r[key]))
+      && Object.entries(filters).every(([key, values]) => !values.size || values.has(dimension(r, key)))
       && (!cycle || r.provider === cycle.provider && r.account === cycle.account && r.timestamp >= cycle.start && r.timestamp < cycle.end));
   }
-  const api = { aggregate, group, filter };
+  const api = { aggregate, group, filter, dimension };
   if (typeof module !== 'undefined') module.exports = api;
   else window.usageDetailsData = api;
 })();

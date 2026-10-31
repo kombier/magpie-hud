@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
-  const { aggregate, group, filter } = window.usageDetailsData;
+  const { aggregate, group, filter, dimension } = window.usageDetailsData;
   const metricNames = { tokens: 'Token', speed: 'TPS', cost: '费用估值', cache: '缓存命中', calls: '调用次数', average: '均次费用' };
   const units = { tokens: 'tok', speed: 'tok/s', cost: '$', cache: '%', calls: '次', average: '$/次' };
   const filterNames = { sourceKey: 'Agent / 来源', model: '模型', provider: '供应商', accountKey: '账号', effort: '强度' };
@@ -75,7 +75,7 @@
       const search = node('input'); search.type = 'search'; search.placeholder = `搜索${name}`; search.setAttribute('aria-label', `搜索${name}`);
       const options = node('div', undefined, 'filter-options');
       const candidates = (data?.rows || []).filter(r => key !== 'accountKey' || !filters.provider.size || filters.provider.has(r.provider));
-      const values = [...new Set([...candidates.map(r => r[key]), ...filters[key]])].sort((a,b) => rowLabel(key,a).localeCompare(rowLabel(key,b),'zh-CN'));
+      const values = [...new Set([...candidates.map(r => dimension(r,key)), ...filters[key]])].sort((a,b) => rowLabel(key,a).localeCompare(rowLabel(key,b),'zh-CN'));
       for (const value of values) {
         const label = node('label'); const box = node('input'); box.type = 'checkbox'; box.checked = filters[key].has(value); box.value = value;
         label.append(box, node('span',rowLabel(key,value)));
@@ -134,7 +134,7 @@
   }
 
   function makeBins(rows) {
-    if (view !== 'trend') return group(rows, r => r[$('group').value], viewCosts)
+    if (view !== 'trend') return group(rows, r => dimension(r,$('group').value), viewCosts)
       .map(g => ({...g, label:rowLabel($('group').value,g.key)})).sort((a,b) => (metricValue(b.stats) ?? -1) - (metricValue(a.stats) ?? -1));
     const hourly = $('grain').value === 'hour';
     const key = r => hourly ? `${r.date} ${String(r.hour).padStart(2,'0')}:00` : r.date;
@@ -167,7 +167,7 @@
 
   function filterPayload() {
     return {
-      sourceKeys: [...filters.sourceKey], models: [...filters.model], providers: [...filters.provider],
+      sourceKeys: [...filters.sourceKey], models: [...filters.model].flatMap(window.hudModelNames.ids), providers: [...filters.provider],
       accountKeys: [...filters.accountKey], efforts: [...filters.effort], session,
     };
   }
@@ -318,7 +318,7 @@
     if (!data) return;
     const rows=drill?displayRows.filter(r=>drill.ids.has(r.id)):displayRows;
     const grouping=$('group').value;
-    const grouped=group(rows,r=>r[grouping],viewCosts).map(g=>({...g,label:rowLabel(grouping,g.key)}));
+    const grouped=group(rows,r=>dimension(r,grouping),viewCosts).map(g=>({...g,label:rowLabel(grouping,g.key)}));
     const requestMode=mode==='requests';
     const entries=requestMode?rows.map(r=>({label:stamp(r.timestamp),row:r,stats:aggregate([r],viewCosts)})):mode==='chart'?makeBins(rows):grouped;
     entries.sort((a,b)=>{
@@ -335,7 +335,7 @@
     thead.append(head);table.append(thead,tbody);
     entries.slice(page*pageSize,(page+1)*pageSize).forEach(entry=>{
       const tr=node('tr'); const cell=(text,numeric=false)=>{const td=node('td',text,numeric?'num':'');td.title=text;tr.append(td);};
-      if(requestMode){const r=entry.row;cell(stamp(r.timestamp));cell(`${r.model} · ${r.effort}`);cell(`${r.provider||'未记录'} · ${window.hudRedact.text(r.account)||'未记录'}`);cell(sourceLabel(r));cell(({success:'成功',failed:'失败',cancelled:'取消',unknown:'未知'})[r.outcome]||'未知');}
+      if(requestMode){const r=entry.row;cell(stamp(r.timestamp));cell(`${window.hudModelNames.display(r.model)} · ${r.effort}`);cell(`${r.provider||'未记录'} · ${window.hudRedact.text(r.account)||'未记录'}`);cell(sourceLabel(r));cell(({success:'成功',failed:'失败',cancelled:'取消',unknown:'未知'})[r.outcome]||'未知');}
       else{const td=node('td'),b=node('button',entry.label);b.type='button';b.title=entry.label;b.addEventListener('click',()=>{drill={label:entry.label,ids:new Set(entry.rows.map(r=>r.id))};mode='requests';page=0;renderTable();});td.append(b);tr.append(td);}
       cell(`${valueText(entry.stats[metric])} ${units[metric]}`,true);
       if(!requestMode)cell(String(entry.stats.calls),true);

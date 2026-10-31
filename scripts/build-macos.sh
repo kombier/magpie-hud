@@ -11,6 +11,9 @@ export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 node --check ui/hud.js
 node --check ui/window-mode.js
 node --check ui/model-usage.js
+node --check ui/model-names.js
+node tests/model-names.cjs
+node tests/details-data.cjs
 node tests/window-mode.cjs
 node tests/source-render.cjs
 cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target aarch64-apple-darwin

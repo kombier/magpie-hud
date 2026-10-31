@@ -59,7 +59,7 @@
   function collect(input) {
     const models = new Map();
     for (const row of input) {
-      const name = (row.model || '').trim() || '服务模型未提供';
+      const name = window.hudModelNames.display((row.model || '').trim()) || '服务模型未提供';
       if (!models.has(name)) models.set(name, makeEmpty(name));
       const model = models.get(name);
       addAmounts(model, row);
@@ -70,7 +70,7 @@
     if (mode === 'cost' && costState.hasData) {
       // 后端已按会话别名和来源精确筛选，再按模型与强度合计。
       for (const row of costState.rows) {
-        const name = (row.model || '').trim() || '服务模型未提供';
+        const name = window.hudModelNames.display((row.model || '').trim()) || '服务模型未提供';
         // 费用与账本分开合计，未匹配的数据保留未知覆盖量。
         if (!models.has(name)) models.set(name, makeEmpty(name));
         const model = models.get(name);
