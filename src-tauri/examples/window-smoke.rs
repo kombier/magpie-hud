@@ -31,23 +31,36 @@ fn main() {
                         || !window.is_maximizable().map_err(|e| e.to_string())? {
                         return Err("Native window controls are not enabled".into());
                     }
-                    let normal = window.outer_size().map_err(|e| e.to_string())?;
-                    window.set_fullscreen(true).map_err(|e| e.to_string())?;
-                    wait_for("fullscreen must occupy the monitor, not just report a requested flag", || {
-                        let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) else { return false };
-                        window.is_fullscreen().unwrap_or(false)
-                            && size.width.abs_diff(monitor.size().width) <= 4
-                            && size.height.abs_diff(monitor.size().height) <= 4
-                    })?;
-                    println!("Native macOS fullscreen: monitor-sized frame verified");
-                    window.set_fullscreen(false).map_err(|e| e.to_string())?;
-                    wait_for("normal frame must return after leaving fullscreen", || {
-                        let Ok(size) = window.outer_size() else { return false };
-                        !window.is_fullscreen().unwrap_or(true)
-                            && size.width.abs_diff(normal.width) <= 4
-                            && size.height.abs_diff(normal.height) <= 4
-                    })?;
-                    println!("Native macOS fullscreen: original frame restored; traffic-light capabilities verified");
+                    let mut failures = Vec::new();
+                    for (label, dock, pinned) in [("regular", true, false), ("menu-bar", false, false),
+                                                  ("pinned", true, true), ("menu-bar+pinned", false, true)] {
+                        handle.set_dock_visibility(dock).map_err(|e| e.to_string())?;
+                        window.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+                        // Policy changes can drop activation; focus after applying each policy.
+                        window.set_focus().map_err(|e| e.to_string())?;
+                        std::thread::sleep(Duration::from_millis(500));
+                        let normal = window.outer_size().map_err(|e| e.to_string())?;
+                        window.set_fullscreen(true).map_err(|e| e.to_string())?;
+                        let entered = wait_for("fullscreen must occupy the monitor", || {
+                            let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) else { return false };
+                            window.is_fullscreen().unwrap_or(false)
+                                && size.width.abs_diff(monitor.size().width) <= 4
+                                && size.height.abs_diff(monitor.size().height) <= 4
+                        });
+                        println!("Native fullscreen {label}: result={entered:?}, requested={:?}, frame={:?}, screen={:?}, focus={:?}",
+                            window.is_fullscreen(), window.outer_size(),
+                            window.current_monitor().map(|m| m.map(|m| *m.size())), window.is_focused());
+                        if entered.is_err() { failures.push(label); }
+                        window.set_fullscreen(false).map_err(|e| e.to_string())?;
+                        wait_for("normal frame must return after leaving fullscreen", || {
+                            let Ok(size) = window.outer_size() else { return false };
+                            !window.is_fullscreen().unwrap_or(true)
+                                && size.width.abs_diff(normal.width) <= 4
+                                && size.height.abs_diff(normal.height) <= 4
+                        })?;
+                    }
+                    if !failures.is_empty() { return Err(format!("Native fullscreen failed in modes: {failures:?}")); }
+                    println!("Native macOS fullscreen: all four modes and original frame restoration verified");
                     Ok(())
                 })();
                 if let Err(error) = &result { eprintln!("{error}"); }
