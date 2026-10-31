@@ -2,7 +2,7 @@ name: Build macOS Apple Silicon
 
 on:
   push:
-    branches: [main]
+    branches: [main, custom]
     tags: ['v*']
   workflow_dispatch:
 
@@ -30,74 +30,29 @@ jobs:
           rustup toolchain install stable --profile minimal --target aarch64-apple-darwin
           rustup default stable
 
-      - name: Test on macOS
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target aarch64-apple-darwin
+      - name: Cache Rust dependencies and build output
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> ../target-ci'
+
+      - name: Cache Tauri CLI
+        id: tauri-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tauri
+          key: macos-tauri-2.12.3-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install Tauri CLI
+        if: steps.tauri-cache.outputs.cache-hit != 'true'
         run: cargo install tauri-cli --version '2.12.3' --locked
 
-      - name: Build app and disk image
-        run: cargo tauri build --ci --target aarch64-apple-darwin --bundles app,dmg -- --locked
-
-      - name: Prepare download
-        run: |
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-          import plistlib
-          import shutil
-          import subprocess
-          import sys
-
-          version = json.loads(Path('src-tauri/tauri.conf.json').read_text())['version']
-          release = Path(os.environ['CARGO_TARGET_DIR']) / 'aarch64-apple-darwin/release'
-          bundle = release / 'bundle'
-
-          print(f'Looking for bundle artifacts under: {bundle}', flush=True)
-          if bundle.is_dir():
-              subprocess.run(['find', str(bundle), '-maxdepth', '4'], check=False)
-          else:
-              print(f'Bundle directory does not exist! Contents of release dir {release}:', flush=True)
-              if release.is_dir():
-                  subprocess.run(['ls', '-la', str(release)], check=False)
-              raise SystemExit('Bundle directory missing')
-
-          apps = list(bundle.glob('macos/*.app'))
-          images = list(bundle.glob('dmg/*.dmg'))
-          print(f'Found apps: {apps}', flush=True)
-          print(f'Found dmgs: {images}', flush=True)
-
-          if not apps:
-              raise SystemExit('No .app found in bundle/macos')
-          if not images:
-              raise SystemExit('No .dmg found in bundle/dmg')
-
-          app = apps[0]
-          dmg = images[0]
-
-          executable = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleExecutable']
-          exec_path = app / 'Contents/MacOS' / executable
-          print(f'Checking binary architecture for: {exec_path}', flush=True)
-          subprocess.run(['lipo', str(exec_path), '-verify_arch', 'arm64'], check=True)
-
-          destination = Path('dist')
-          destination.mkdir(parents=True, exist_ok=True)
-          name = f'magpie-hud-{version}-macos-arm64'
-          shutil.copy2(dmg, destination / f'{name}.dmg')
-          subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(destination / f'{name}.app.zip')], check=True)
-          files = sorted(destination.iterdir())
-          (destination / 'SHA256SUMS.txt').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
-          with open(os.environ['GITHUB_ENV'], 'a') as output:
-              output.write(f'ARTIFACT_NAME={name}\n')
-          print('Prepared download artifacts successfully.', flush=True)
-          PY
+      - name: Test, build, sign and package
+        run: bash scripts/build-macos.sh
 
       - name: Upload app, disk image and checksums
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
-          path: dist/*
+          path: ${{ env.ARTIFACT_PATH }}/*
           if-no-files-found: error
           retention-days: 30

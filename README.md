@@ -1,6 +1,6 @@
 # magpie-hud
 
-> **自用定制版（`custom` 分支）**：基于上游 1.0.10，程序版本 1.0.11。Mac 使用固定深色背景 `#17191e`，移除原生 HUD 磨砂，避免浅色系统外观下背景发白；Windows 保留上游效果。`main` 分支保持上游原版。
+> **自用定制版（`custom` 分支）**：基于上游 1.0.10，程序版本 1.0.11。Mac 使用固定深色背景 `#17191e`，移除原生 HUD 磨砂，避免浅色系统外观下背景发白；Windows 保留上游效果。`main` 分支保持上游原版。构建、更新与恢复方法见[自用版说明](docs/custom-macos.md)。
 
 > **当前 `main` 就是这套 Tauri 2 应用。** 克隆后请用 Tauri CLI 2，在项目根目录执行 `cargo tauri dev`（发布包用 `cargo tauri build`）。不要安装 Qt，不要使用 CXX-Qt，也不要运行 `build.ps1`；那是已经替换掉的旧脚手架。
 
