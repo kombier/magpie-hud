@@ -179,7 +179,17 @@ pub fn run() {
         .manage(DetailsWindowLock(tauri::async_runtime::Mutex::new(())))
         .manage(window_mode::FullscreenTransition::default())
         .setup(|app| {
-            window_mode::build_main_window(app.handle())?;
+            let mut window_config = app.config().app.windows.iter().find(|window| window.label == "main")
+                .expect("缺少 main 窗口配置").clone();
+            let saved = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.window;
+            if let Some(placement) = saved.filter(stable_window) {
+                // AppKit/Tao restores its creation frame after fullscreen; restore before creation.
+                window_config.width = placement.width.max(360.0);
+                window_config.height = placement.height.max(280.0);
+                window_config.x = Some(placement.x);
+                window_config.y = Some(placement.y);
+            }
+            window_mode::build_main_window(app.handle(), &window_config)?;
             setup_window(app.handle())?;
             setup_tray(app.handle())?;
             #[cfg(target_os = "macos")]
@@ -215,12 +225,6 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
     let config = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.clone();
     let window = app.get_webview_window("main").expect("缺少 main 窗口");
     window.set_always_on_top(config.always_on_top)?;
-    if let Some(placement) = config.window.filter(|placement| stable_window(placement)) {
-        let width = placement.width.max(360.0);
-        let height = placement.height.max(280.0);
-        window.set_position(LogicalPosition::new(placement.x, placement.y))?;
-        window.set_size(LogicalSize::new(width, height))?;
-    }
     constrain_current(&window)?;
     backdrop::apply(&window)?;
     window.show()?;

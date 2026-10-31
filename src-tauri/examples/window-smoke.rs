@@ -15,17 +15,15 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let window = magpie_hud_lib::window_mode::build_main_window(app.handle())?;
+            let mut config = app.config().app.windows.iter().find(|window| window.label == "main")
+                .expect("Missing main window config").clone();
+            // Set the initial frame, just as production does with a persisted normal placement.
+            config.width = 800.0;
+            config.height = 400.0;
+            config.center = true;
+            let window = magpie_hud_lib::window_mode::build_main_window(app.handle(), &config)?;
             window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>)?;
             window.set_background_color(Some(tauri::window::Color(23, 25, 30, 255)))?;
-            // CI's desktop can be only 1024px wide; production constrains its normal frame too.
-            let monitor = window.current_monitor()?.expect("Native smoke test needs a desktop");
-            let scale = window.scale_factor()?;
-            window.set_size(tauri::PhysicalSize::new(
-                ((800.0 * scale) as u32).min(monitor.work_area().size.width),
-                ((400.0 * scale) as u32).min(monitor.work_area().size.height),
-            ))?;
-            window.center()?;
             window.show()?;
             window.set_focus()?;
             app.handle().set_dock_visibility(false)?;
