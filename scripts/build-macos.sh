@@ -47,7 +47,6 @@ subprocess.run(['hdiutil', 'create', '-volname', config['productName'], '-srcfol
 metadata = destination / 'BUILD-INFO.json'
 metadata.write_text(json.dumps({
     'version': config['version'], 'variant': 'custom', 'commit': commit,
-    'dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], text=True).strip()),
     'target': 'aarch64-apple-darwin', 'signature': 'ad-hoc', 'notarized': False,
 }, indent=2) + '\n')
 files = [zip_path, dmg_path, metadata]
