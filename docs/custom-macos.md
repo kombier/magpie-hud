@@ -2,7 +2,7 @@
 
 `origin` 为 `kombier/magpie-hud`，`upstream` 为 `smallcat2333/magpie-hud`。
 `main` 只跟随上游；`custom` 保存自用补丁，是安装包的构建分支。
-本次基线为上游 1.0.10（`89d22087ea75b5cb07af43ddf9288e360a5b39d7`），自用程序版本为 1.0.14，界面标注 `Custom`。
+本次基线为上游 1.0.10（`89d22087ea75b5cb07af43ddf9288e360a5b39d7`），自用程序版本为 1.0.15，界面标注 `Custom`。
 
 ## 补丁范围
 
@@ -21,6 +21,8 @@ ZCode 来源复用 Magpie 的 `zcode.png`，标题每 10 秒通过原生 `magpie
 Mac 可见窗口使用普通应用模式并显示 Dock 图标，以支持原生全屏；窗口收起后默认仅保留菜单栏。菜单栏“收起后仍显示 Dock 图标”对应原有 `showInDock` 配置键，控制隐藏窗口后是否仍保留 Dock 图标。隐藏 Dock 的 Accessory 模式在原生检查中无法进入全屏，故不再用于可见窗口。
 正常窗口尺寸在窗口创建时恢复，避免退出全屏时回到 JSON 中最初的默认尺寸。
 CI 另运行 `src-tauri/examples/window-smoke.rs`，复用生产窗口创建函数并使用真实 AppKit，检查原生控件能力、全屏后的实际显示器尺寸与退出后恢复原尺寸；只测试请求状态的前端回归不能代替这项检查。
+
+1.0.15 显式将主窗口声明为 AppKit `FullScreenPrimary`，让置顶 HUD 的原生绿色按钮提供真正全屏，而非仅放大到桌面工作区。CI 直接调用原生绿色按钮自身的 action，并分别验证绿色按钮和全屏 API 在四种 Dock/置顶组合中的全屏尺寸与退出恢复；不更换系统按钮的 target/action。
 
 查看相对上游的改动：
 

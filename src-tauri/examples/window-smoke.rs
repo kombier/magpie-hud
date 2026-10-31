@@ -13,6 +13,29 @@ fn main() {
         Err(format!("Native window check timed out: {label}"))
     }
 
+    fn click_green(window: &tauri::WebviewWindow) -> Result<(), String> {
+        let owned = window.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        window.run_on_main_thread(move || {
+            use objc2_app_kit::{NSWindow, NSWindowButton};
+            let result = (|| {
+                let pointer = owned.ns_window().map_err(|e| e.to_string())?;
+                // SAFETY: this is our live Tauri window on the AppKit main thread.
+                let native = unsafe { &*pointer.cast::<NSWindow>() };
+                let button = native.standardWindowButton(NSWindowButton::ZoomButton)
+                    .ok_or("Missing native green button")?;
+                println!("Native green control: behavior={:?}, action={:?}, level={}",
+                    native.collectionBehavior(), button.action(), native.level());
+                // Invoke the standard control's own action, without replacing its target or selector.
+                // SAFETY: no sender, just as for an ordinary programmatic NSControl click.
+                unsafe { button.performClick(None); }
+                Ok(())
+            })();
+            let _ = send.send(result);
+        }).map_err(|e| e.to_string())?;
+        receive.recv_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?
+    }
+
     tauri::Builder::default()
         .manage(magpie_hud_lib::window_mode::FullscreenTransition::default())
         .setup(|app| {
@@ -37,41 +60,45 @@ fn main() {
                         return Err("Native window controls are not enabled".into());
                     }
                     let mut failures = Vec::new();
-                    for (label, keep_in_dock, pinned) in [("auto-dock", false, false), ("keep-dock", true, false),
-                                                          ("auto-dock+pinned", false, true), ("keep-dock+pinned", true, true)] {
-                        magpie_hud_lib::window_mode::show_window(&handle, &window).map_err(|e| e.to_string())?;
-                        window.set_always_on_top(pinned).map_err(|e| e.to_string())?;
-                        // Policy changes can drop activation; focus after applying each policy.
-                        window.set_focus().map_err(|e| e.to_string())?;
-                        std::thread::sleep(Duration::from_millis(500));
-                        let normal = window.outer_size().map_err(|e| e.to_string())?;
-                        window.set_fullscreen(true).map_err(|e| e.to_string())?;
-                        let entered = wait_for("fullscreen must occupy the monitor", || {
-                            let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) else { return false };
-                            window.is_fullscreen().unwrap_or(false)
-                                && size.width.abs_diff(monitor.size().width) <= 4
-                                && size.height.abs_diff(monitor.size().height) <= 4
-                        });
-                        println!("Native fullscreen {label}: result={entered:?}, requested={:?}, frame={:?}, screen={:?}, focus={:?}",
-                            window.is_fullscreen(), window.outer_size(),
-                            window.current_monitor().map(|m| m.map(|m| *m.size())), window.is_focused());
-                        if entered.is_err() { failures.push(label); }
-                        window.set_fullscreen(false).map_err(|e| e.to_string())?;
-                        let restored = wait_for("normal frame must return after leaving fullscreen", || {
-                            let Ok(size) = window.outer_size() else { return false };
-                            !window.is_fullscreen().unwrap_or(true)
-                                && size.width.abs_diff(normal.width) <= 4
-                                && size.height.abs_diff(normal.height) <= 4
-                        });
-                        println!("Native restore {label}: result={restored:?}, expected={normal:?}, frame={:?}, requested={:?}",
-                            window.outer_size(), window.is_fullscreen());
-                        restored?;
-                        magpie_hud_lib::window_mode::hide_window(&handle, &window, keep_in_dock).map_err(|e| e.to_string())?;
-                        wait_for("hide to the menu bar", || !window.is_visible().unwrap_or(true))?;
-                        println!("Native hide {label}: window hidden; keep_in_dock={keep_in_dock}");
+                    for native_green in [true, false] {
+                        for (label, keep_in_dock, pinned) in [("auto-dock", false, false), ("keep-dock", true, false),
+                                                              ("auto-dock+pinned", false, true), ("keep-dock+pinned", true, true)] {
+                            let label = format!("{label}/{}", if native_green { "green-button" } else { "set-fullscreen" });
+                            magpie_hud_lib::window_mode::show_window(&handle, &window).map_err(|e| e.to_string())?;
+                            window.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+                            // Policy changes can drop activation; focus after applying each policy.
+                            window.set_focus().map_err(|e| e.to_string())?;
+                            std::thread::sleep(Duration::from_millis(500));
+                            let normal = window.outer_size().map_err(|e| e.to_string())?;
+                            if native_green { click_green(&window)?; }
+                            else { window.set_fullscreen(true).map_err(|e| e.to_string())?; }
+                            let entered = wait_for("fullscreen must occupy the monitor", || {
+                                let (Ok(size), Ok(Some(monitor))) = (window.outer_size(), window.current_monitor()) else { return false };
+                                window.is_fullscreen().unwrap_or(false)
+                                    && size.width.abs_diff(monitor.size().width) <= 4
+                                    && size.height.abs_diff(monitor.size().height) <= 4
+                            });
+                            println!("Native fullscreen {label}: result={entered:?}, requested={:?}, frame={:?}, screen={:?}, focus={:?}",
+                                window.is_fullscreen(), window.outer_size(),
+                                window.current_monitor().map(|m| m.map(|m| *m.size())), window.is_focused());
+                            if entered.is_err() { failures.push(label.clone()); }
+                            window.set_fullscreen(false).map_err(|e| e.to_string())?;
+                            let restored = wait_for("normal frame must return after leaving fullscreen", || {
+                                let Ok(size) = window.outer_size() else { return false };
+                                !window.is_fullscreen().unwrap_or(true)
+                                    && size.width.abs_diff(normal.width) <= 4
+                                    && size.height.abs_diff(normal.height) <= 4
+                            });
+                            println!("Native restore {label}: result={restored:?}, expected={normal:?}, frame={:?}, requested={:?}",
+                                window.outer_size(), window.is_fullscreen());
+                            restored?;
+                            magpie_hud_lib::window_mode::hide_window(&handle, &window, keep_in_dock).map_err(|e| e.to_string())?;
+                            wait_for("hide to the menu bar", || !window.is_visible().unwrap_or(true))?;
+                            println!("Native hide {label}: window hidden; keep_in_dock={keep_in_dock}");
+                        }
                     }
                     if !failures.is_empty() { return Err(format!("Native fullscreen failed in modes: {failures:?}")); }
-                    println!("Native macOS fullscreen: all four modes and original frame restoration verified");
+                    println!("Native macOS fullscreen: green button and API verified across all four modes with original frame restoration");
                     Ok(())
                 })();
                 if let Err(error) = &result { eprintln!("{error}"); }

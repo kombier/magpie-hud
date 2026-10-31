@@ -10,13 +10,29 @@ pub fn build_main_window(app: &AppHandle, config: &tauri::utils::config::WindowC
     let builder = builder.decorations(true).transparent(false).theme(Some(tauri::Theme::Dark))
         .title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true)
         .traffic_light_position(tauri::LogicalPosition::new(16.0, 22.0));
-    builder.build()
+    let window = builder.build()?;
+    #[cfg(target_os = "macos")]
+    {
+        let owned = window.clone();
+        window.run_on_main_thread(move || {
+            use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior as Behavior};
+            let pointer = owned.ns_window().expect("Main window must have an AppKit window");
+            // SAFETY: Tauri owns this NSWindow; `owned` keeps it alive on the AppKit main thread.
+            let native = unsafe { &*pointer.cast::<NSWindow>() };
+            let mut behavior = native.collectionBehavior();
+            behavior.remove(Behavior::FullScreenAuxiliary | Behavior::FullScreenNone);
+            behavior.insert(Behavior::FullScreenPrimary);
+            // Floating HUD windows otherwise expose zoom/fill on the green control.
+            native.setCollectionBehavior(behavior);
+        })?;
+    }
+    Ok(window)
 }
 
 #[derive(Default)]
 pub struct FullscreenTransition(pub AtomicBool);
 
-/// Accessory apps cannot enter AppKit fullscreen. Visible windows use Regular policy.
+/// Visible windows use Regular policy, required by fullscreen in this Tauri configuration.
 pub fn show_window(app: &AppHandle, window: &WebviewWindow) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     app.set_dock_visibility(true)?;
