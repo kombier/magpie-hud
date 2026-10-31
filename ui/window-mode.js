@@ -5,6 +5,7 @@ window.hudWindowMode = {
   async bind({ invoke, listen, initial, reportError }) {
     const button = document.getElementById('fullscreen');
     const hud = document.getElementById('hud');
+    hud.dataset.nativeControls = String(Boolean(initial.nativeControls));
     let fullscreen = false, requested = null;
     const render = actual => {
       fullscreen = Boolean(actual);

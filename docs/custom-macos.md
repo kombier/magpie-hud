@@ -2,7 +2,7 @@
 
 `origin` 为 `kombier/magpie-hud`，`upstream` 为 `smallcat2333/magpie-hud`。
 `main` 只跟随上游；`custom` 保存自用补丁，是安装包的构建分支。
-本次基线为上游 1.0.10（`89d22087ea75b5cb07af43ddf9288e360a5b39d7`），自用程序版本为 1.0.13，界面标注 `Custom`。
+本次基线为上游 1.0.10（`89d22087ea75b5cb07af43ddf9288e360a5b39d7`），自用程序版本为 1.0.14，界面标注 `Custom`。
 
 ## 补丁范围
 
@@ -16,6 +16,9 @@ Mac 在 `src-tauri/src/backdrop.rs` 中移除系统 HUD 磨砂，并将原生窗
 Mac 默认只常驻菜单栏，菜单栏图标右键菜单中的“在 Dock 中显示图标”可切换并保存 `showInDock`；不影响其他应用的 Dock 或菜单栏设置。
 应用图标替换为深色喜鹊，菜单栏使用独立单色模板；模型占比图改用低饱和深色。
 ZCode 来源复用 Magpie 的 `zcode.png`，标题每 10 秒通过原生 `magpie sessions --json` 查询；`sess_<uuid>` 与请求中的 `<uuid>` 精确关联，不直接读取 ZCode 内部数据库。命令失败时保留此前标题。
+
+1.0.14 在创建 Mac 窗口时使用原生装饰、深色 Overlay 标题栏和左上角红黄绿按钮，隐藏右侧重复的全屏/最小化/关闭按钮；关闭窗口收回菜单栏，菜单栏“退出”才结束程序。Windows 保持自绘控件。
+CI 另运行 `src-tauri/examples/window-smoke.rs`，复用生产窗口创建函数并使用真实 AppKit，检查原生控件能力、全屏后的实际显示器尺寸与退出后恢复原尺寸；只测试请求状态的前端回归不能代替这项检查。
 
 查看相对上游的改动：
 

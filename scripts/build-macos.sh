@@ -14,6 +14,9 @@ node --check ui/model-usage.js
 node tests/window-mode.cjs
 node tests/source-render.cjs
 cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target aarch64-apple-darwin
+if [[ "${CI:-}" == "true" ]]; then
+  cargo run --manifest-path src-tauri/Cargo.toml --example window-smoke --locked --target aarch64-apple-darwin
+fi
 cargo tauri build --ci --target aarch64-apple-darwin --bundles app -- --locked
 
 python3 - <<'PY'

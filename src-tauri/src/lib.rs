@@ -12,7 +12,7 @@ mod tail;
 mod telemetry;
 mod usage;
 mod winmon;
-mod window_mode;
+pub mod window_mode;
 
 use chrono::{Datelike, Local};
 use config::{load_config, save_config, usage_path, AppConfig, WindowPlacement};
@@ -165,6 +165,7 @@ struct StartupState {
     snapshot: RouteSnapshot,
     pinned: bool,
     fullscreen: bool,
+    native_controls: bool,
 }
 
 /// 窗口创建尚未完成时，后续双击等待同一轮创建，避免并发注册相同标签。
@@ -178,6 +179,7 @@ pub fn run() {
         .manage(DetailsWindowLock(tauri::async_runtime::Mutex::new(())))
         .manage(window_mode::FullscreenTransition::default())
         .setup(|app| {
+            window_mode::build_main_window(app.handle())?;
             setup_window(app.handle())?;
             setup_tray(app.handle())?;
             #[cfg(target_os = "macos")]
@@ -232,8 +234,11 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
                 let fullscreen = window_mode::observe(&window);
                 let _ = window.emit("fullscreen-changed", fullscreen);
                 if window.is_minimized().unwrap_or(false) {
+                    #[cfg(not(target_os = "macos"))]
+                    {
                     let _ = window.hide();
                     let _ = window.unminimize();
+                    }
                 } else if let Some(placement) = stable_outer_placement(&window) {
                     let state = handle.state::<Arc<Mutex<Runtime>>>();
                     state.lock().expect("状态锁损坏").window_save.remember(placement);
@@ -241,7 +246,19 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
             }
             schedule_window_save(&handle);
         }
-        tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Focused(false) => {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            #[cfg(target_os = "macos")]
+            {
+                api.prevent_close();
+                hide_main_window(&handle);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = api;
+                let _ = remember_window(&handle);
+            }
+        }
+        tauri::WindowEvent::Focused(false) => {
             let _ = remember_window(&handle);
         }
         _ => {}
@@ -552,7 +569,7 @@ fn startup_state(app: AppHandle) -> StartupState {
         .is_always_on_top()
         .unwrap_or(true);
     let fullscreen = app.get_webview_window("main").is_some_and(|window| window.is_fullscreen().unwrap_or(false));
-    StartupState { snapshot, pinned, fullscreen }
+    StartupState { snapshot, pinned, fullscreen, native_controls: cfg!(target_os = "macos") }
 }
 
 /// 单实例详情窗口；启动先订阅再读取上下文，避免首次打开丢失事件。

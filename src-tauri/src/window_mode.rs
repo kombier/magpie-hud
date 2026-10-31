@@ -3,6 +3,18 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, WebviewWindow};
 
+/// Share the exact production window style with the native macOS smoke check.
+pub fn build_main_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
+    let config = app.config().app.windows.iter().find(|window| window.label == "main")
+        .expect("缺少 main 窗口配置");
+    let builder = tauri::WebviewWindowBuilder::from_config(app, config)?;
+    #[cfg(target_os = "macos")]
+    let builder = builder.decorations(true).transparent(false).theme(Some(tauri::Theme::Dark))
+        .title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(16.0, 22.0));
+    builder.build()
+}
+
 #[derive(Default)]
 pub struct FullscreenTransition(pub AtomicBool);
 
