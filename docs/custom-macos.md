@@ -8,7 +8,7 @@
 
 Mac 在 `src-tauri/src/backdrop.rs` 中移除系统 HUD 磨砂，并将原生窗口和 WebView 底色设为不透明 `#17191e`。
 不改系统外观、网关、账号、统计或模型配置。Windows 保留上游磨砂实现。
-背景补丁独立成一个 Git 提交；构建流程和本文另一个提交保存。
+背景补丁独立成一个 Git 提交；构建流程和本文单独提交保存。
 
 查看相对上游的改动：
 
@@ -19,7 +19,7 @@ git diff main...custom
 
 ## 构建
 
-GitHub Actions 的 **Build macOS Apple Silicon** 在推送 `custom` 时自动构建。
+GitHub Actions 的 **Build macOS Apple Silicon** 在 `macos-15` ARM64 runner 上构建，推送 `custom` 时自动运行。
 也可在 Actions 中选择该工作流、选择 `custom` 分支，手动运行：
 
 ```bash
