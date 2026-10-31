@@ -18,6 +18,14 @@ fn main() {
             let window = magpie_hud_lib::window_mode::build_main_window(app.handle())?;
             window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>)?;
             window.set_background_color(Some(tauri::window::Color(23, 25, 30, 255)))?;
+            // CI's desktop can be only 1024px wide; production constrains its normal frame too.
+            let monitor = window.current_monitor()?.expect("Native smoke test needs a desktop");
+            let scale = window.scale_factor()?;
+            window.set_size(tauri::PhysicalSize::new(
+                ((800.0 * scale) as u32).min(monitor.work_area().size.width),
+                ((400.0 * scale) as u32).min(monitor.work_area().size.height),
+            ))?;
+            window.center()?;
             window.show()?;
             window.set_focus()?;
             app.handle().set_dock_visibility(false)?;
@@ -52,12 +60,15 @@ fn main() {
                             window.current_monitor().map(|m| m.map(|m| *m.size())), window.is_focused());
                         if entered.is_err() { failures.push(label); }
                         window.set_fullscreen(false).map_err(|e| e.to_string())?;
-                        wait_for("normal frame must return after leaving fullscreen", || {
+                        let restored = wait_for("normal frame must return after leaving fullscreen", || {
                             let Ok(size) = window.outer_size() else { return false };
                             !window.is_fullscreen().unwrap_or(true)
                                 && size.width.abs_diff(normal.width) <= 4
                                 && size.height.abs_diff(normal.height) <= 4
-                        })?;
+                        });
+                        println!("Native restore {label}: result={restored:?}, expected={normal:?}, frame={:?}, requested={:?}",
+                            window.outer_size(), window.is_fullscreen());
+                        restored?;
                     }
                     if !failures.is_empty() { return Err(format!("Native fullscreen failed in modes: {failures:?}")); }
                     println!("Native macOS fullscreen: all four modes and original frame restoration verified");
