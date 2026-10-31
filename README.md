@@ -1,5 +1,7 @@
 # magpie-hud
 
+> **自用定制版（`custom` 分支）**：基于上游 1.0.10，程序版本 1.0.11。Mac 使用固定深色背景 `#17191e`，移除原生 HUD 磨砂，避免浅色系统外观下背景发白；Windows 保留上游效果。`main` 分支保持上游原版。
+
 > **当前 `main` 就是这套 Tauri 2 应用。** 克隆后请用 Tauri CLI 2，在项目根目录执行 `cargo tauri dev`（发布包用 `cargo tauri build`）。不要安装 Qt，不要使用 CXX-Qt，也不要运行 `build.ps1`；那是已经替换掉的旧脚手架。
 
 ```bash
@@ -133,7 +135,9 @@ python scripts/verify_routing_window.py
 
 ## 变更记录
 
-当前程序版本是 `1.0.10`，标题显示为 `Magpie HUD V.1.0.10`。上方截图来自 v0.0.32，保留为实际运行示例。
+当前程序版本是 `1.0.11`，标题显示为 `Magpie HUD V.1.0.11 Custom`。上方截图来自 v0.0.32，保留为实际运行示例。
+
+2026-11-01 | 1.0.11 Custom | Mac 移除原生 HUD 磨砂，使用固定不透明深色背景；不改变系统外观设置或模型配置。
 
 2026-10-30 | 1.0.10 | 修复 macOS Actions 整理产物时 `lipo` 参数顺序错误（应为 `lipo <文件> -verify_arch arm64`）导致校验 ARM64 失败的问题；此前 1.0.7、1.0.9 误判为文件名问题。
 

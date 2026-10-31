@@ -1,6 +1,6 @@
-//! Windows 桌面磨砂使用 Accent 合成，不随 DWM 的非激活状态退为不透明背景。
+//! Windows 使用 Accent 磨砂；macOS 使用固定深色背景，避免浅色系统材质冲淡文字。
 
-/// 只在建窗时设置当前 HWND；不修改系统透明效果或其他应用的窗口。
+/// 只设置当前应用窗口；不修改系统透明效果或其他应用的窗口。
 pub fn apply(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     #[cfg(windows)]
     {
@@ -53,10 +53,11 @@ pub fn apply(window: &tauri::WebviewWindow) -> tauri::Result<()> {
         }
     }
     #[cfg(target_os = "macos")]
-    window.set_effects(tauri::utils::config::WindowEffectsConfig {
-        effects: vec![tauri::utils::WindowEffect::HudWindow],
-        ..Default::default()
-    })?;
+    {
+        // 清除配置中的 HUD 材质，并同时设置原生窗口和 WebView 的不透明底色。
+        window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>)?;
+        window.set_background_color(Some(tauri::window::Color(23, 25, 30, 255)))?;
+    }
     #[cfg(not(any(windows, target_os = "macos")))]
     let _ = window;
     Ok(())
