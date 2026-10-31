@@ -36,12 +36,15 @@ pub struct AppConfig {
     pub details_window: Option<WindowPlacement>,
     /// 是否置顶，默认 true。
     pub always_on_top: bool,
+    /// macOS Dock 图标；旧配置默认仅常驻菜单栏。
+    #[serde(default)]
+    pub show_in_dock: bool,
 }
 
 impl Default for AppConfig {
     /// 返回首次运行配置：默认路径、本机显示地址、无保存位置、置顶。
     fn default() -> Self {
-        Self { usage_jsonl_path: String::new(), magpie_host: "127.0.0.1:3425".to_string(), window: None, details_window: None, always_on_top: true }
+        Self { usage_jsonl_path: String::new(), magpie_host: "127.0.0.1:3425".to_string(), window: None, details_window: None, always_on_top: true, show_in_dock: false }
     }
 }
 
@@ -112,10 +115,13 @@ mod tests {
         let old=r#"{"usageJsonlPath":"","magpieHost":"127.0.0.1:3425","window":null,"alwaysOnTop":true}"#;
         let mut config:AppConfig=serde_json::from_str(old).unwrap();
         assert_eq!(config.details_window,None);
+        assert!(!config.show_in_dock);
+        config.show_in_dock = true;
         config.details_window=Some(WindowPlacement{x:-120.0,y:80.0,width:960.0,height:720.0});
         let restored:AppConfig=serde_json::from_slice(&serde_json::to_vec(&config).unwrap()).unwrap();
         assert_eq!(restored.details_window,config.details_window);
         assert_eq!(restored.window,None);
+        assert!(restored.show_in_dock);
     }
 
     /// 空路径回到默认日志，空白地址与关闭置顶必须原样保存。

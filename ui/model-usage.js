@@ -10,8 +10,8 @@
   const table = document.getElementById('model-usage-table-body');
   const tooltip = document.getElementById('model-usage-tooltip');
   const ns = 'http://www.w3.org/2000/svg';
-  // 固定色序：蓝、橙、青绿、紫、玫红；灰色仅用于合并项，模型切换口径时保持同色。
-  const colors = ['#3987e5', '#d95926', '#199e70', '#9085e9', '#d55181'];
+  // 深色低饱和色序；大面积模型占比保持安静，切换口径时保持同色。
+  const colors = ['#2e4556', '#514237', '#304b46', '#45405a', '#523b49'];
   const effortColors = { low: '#9ccfff', medium: '#8dd7b0', high: '#e6cf89', xhigh: '#f2b17c', max: '#ef97ab', ultra: '#e4acdf', none: '#969aa5' };
   const effortOrder = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
   const format = new Intl.NumberFormat('zh-CN');
@@ -93,8 +93,8 @@
     return result;
   }
   function colorFor(name) {
-    if (name === '其他') return '#626b7a';
-    if (!colorsByModel.has(name)) colorsByModel.set(name, colors[colorsByModel.size] || '#696f79');
+    if (name === '其他') return '#353c46';
+    if (!colorsByModel.has(name)) colorsByModel.set(name, colors[colorsByModel.size] || '#3b424c');
     return colorsByModel.get(name);
   }
   // 按面积二分；优先保留每个能单独展示的模型，其余汇入同一个“其他”。

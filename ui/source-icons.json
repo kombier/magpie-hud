@@ -5,6 +5,7 @@
     { "agents": ["Claude Code", "claude", "claudecode"], "icon": "icons/claudecode-color.svg" },
     { "agents": ["Claude Desktop", "claudedesktop"], "icon": "icons/claude-color.svg" },
     { "agents": ["Codex"], "icon": "icons/codex-color.svg" },
+    { "agents": ["ZCode", "zcode", "Z Code"], "icon": "icons/zcode.png" },
     { "agents": ["Hermes Agent", "Hermes"], "icon": "icons/nousresearch.svg" },
     { "agents": ["Kiro"], "icon": "icons/kiro-color.svg" },
     { "agents": ["Cursor"], "icon": "icons/cursor.svg" },

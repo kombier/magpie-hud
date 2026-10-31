@@ -6,11 +6,13 @@ mod details;
 mod history;
 mod hourly;
 mod live;
+mod native_titles;
 mod placement;
 mod tail;
 mod telemetry;
 mod usage;
 mod winmon;
+mod window_mode;
 
 use chrono::{Datelike, Local};
 use config::{load_config, save_config, usage_path, AppConfig, WindowPlacement};
@@ -162,6 +164,7 @@ impl WindowSave {
 struct StartupState {
     snapshot: RouteSnapshot,
     pinned: bool,
+    fullscreen: bool,
 }
 
 /// 窗口创建尚未完成时，后续双击等待同一轮创建，避免并发注册相同标签。
@@ -173,9 +176,15 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(Runtime::new())))
         .manage(Mutex::new(details::DetailContext::default()))
         .manage(DetailsWindowLock(tauri::async_runtime::Mutex::new(())))
+        .manage(window_mode::FullscreenTransition::default())
         .setup(|app| {
             setup_window(app.handle())?;
             setup_tray(app.handle())?;
+            #[cfg(target_os = "macos")]
+            {
+                let visible = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
+                app.handle().set_dock_visibility(visible)?;
+            }
             start_watcher(app.handle().clone());
             start_live(app.handle().clone());
             Ok(())
@@ -190,6 +199,7 @@ pub fn run() {
             query_model_costs,
             query_route_history,
             set_pinned,
+            window_mode::set_fullscreen,
             reset_window_position,
             hide_window,
             close_window
@@ -219,6 +229,8 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             if let Some(window) = handle.get_webview_window("main") {
+                let fullscreen = window_mode::observe(&window);
+                let _ = window.emit("fullscreen-changed", fullscreen);
                 if window.is_minimized().unwrap_or(false) {
                     let _ = window.hide();
                     let _ = window.unminimize();
@@ -246,6 +258,12 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
     let exit = tauri::menu::MenuItem::with_id(app, "exit", "退出", true, None::<&str>)?;
     let menu = tauri::menu::Menu::with_items(app, &[&show, &hide, &reset, &reset_details, &separator, &exit])?;
+    #[cfg(target_os = "macos")]
+    {
+        let visible = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
+        let dock = tauri::menu::CheckMenuItem::with_id(app, "show-in-dock", "在 Dock 中显示图标", true, visible, None::<&str>)?;
+        menu.insert(&dock, 4)?;
+    }
     let tray = tauri::tray::TrayIconBuilder::with_id("main")
         .tooltip("Magpie HUD")
         .menu(&menu)
@@ -263,6 +281,12 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = app.emit("config-error", error);
                 }
             }
+            #[cfg(target_os = "macos")]
+            "show-in-dock" => {
+                if let Err(error) = toggle_dock_visibility(app) {
+                    let _ = app.emit("config-error", error);
+                }
+            }
             "exit" => {
                 let _ = remember_details(&app);
                 let _ = remember_window(app);
@@ -270,13 +294,33 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             _ => {}
         })
-        .build(app)?;
+        ;
+    #[cfg(target_os = "macos")]
+    let tray = tray.icon(tauri::image::Image::new_owned(include_bytes!("../icons/tray.rgba").to_vec(), 32, 32)).icon_as_template(true);
+    let tray = tray.build(app)?;
     // 菜单点击只在托盘图标存在时注册；左键同样恢复并聚焦。
     tray.on_tray_icon_event(|tray, event| {
         if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
             show_main_window(tray.app_handle());
         }
     });
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn toggle_dock_visibility(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<Arc<Mutex<Runtime>>>();
+    let mut runtime = state.lock().expect("状态锁损坏");
+    if let Some(error) = &runtime.config_error { return Err(error.clone()); }
+    let previous = runtime.config.show_in_dock;
+    let mut config = runtime.config.clone();
+    config.show_in_dock = !previous;
+    app.set_dock_visibility(config.show_in_dock).map_err(|error| error.to_string())?;
+    if let Err(error) = save_config(&config::config_path(), &config) {
+        let _ = app.set_dock_visibility(previous);
+        return Err(error);
+    }
+    runtime.config = config;
     Ok(())
 }
 
@@ -351,6 +395,23 @@ fn start_watcher(app: AppHandle) {
 /// 路由长轮询与活跃请求分开读取，等待路由变化不阻塞活跃结束检测。
 fn start_live(app: AppHandle) {
     let shared = Arc::clone(app.state::<Arc<Mutex<Runtime>>>().inner());
+    let native_names = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let native_output = Arc::clone(&native_names);
+    let native_shared = Arc::clone(&shared);
+    std::thread::spawn(move || {
+        let mut names = std::collections::HashMap::new();
+        loop {
+            let needed = {
+                let runtime = native_shared.lock().expect("状态锁损坏");
+                runtime.snapshot.agent_stats.iter().any(|stats| stats.agent.eq_ignore_ascii_case("zcode"))
+                    || runtime.snapshot.sessions.iter().any(|session| session.agent.eq_ignore_ascii_case("zcode"))
+            };
+            if needed && native_titles::refresh(&mut names).is_ok() {
+                *native_output.lock().expect("标题锁损坏") = names.clone();
+            }
+            std::thread::sleep(Duration::from_secs(10));
+        }
+    });
     let host = shared.lock().expect("状态锁损坏").config.magpie_host.clone();
     let base = match live::gateway_url(&host) {
         Ok(base) => base,
@@ -444,6 +505,7 @@ fn start_live(app: AppHandle) {
         loop {
             if last_titles.elapsed() >= Duration::from_secs(2) {
                 names = custom_titles.scan();
+                names.extend(native_names.lock().expect("标题锁损坏").clone());
                 names.extend(titles.scan(&live::desktop_roots()));
                 aliases = titles.aliases();
                 last_titles = Instant::now();
@@ -489,7 +551,8 @@ fn startup_state(app: AppHandle) -> StartupState {
         .expect("缺少窗口")
         .is_always_on_top()
         .unwrap_or(true);
-    StartupState { snapshot, pinned }
+    let fullscreen = app.get_webview_window("main").is_some_and(|window| window.is_fullscreen().unwrap_or(false));
+    StartupState { snapshot, pinned, fullscreen }
 }
 
 /// 单实例详情窗口；启动先订阅再读取上下文，避免首次打开丢失事件。
@@ -979,6 +1042,7 @@ fn remember_window(app: &AppHandle) -> Result<(), String> {
 
 /// 拒绝最小化哨兵、零尺寸和非有限坐标，只接受可再次恢复的正常矩形。
 fn stable_outer_placement(window: &WebviewWindow) -> Option<WindowPlacement> {
+    if window_mode::suppress_geometry(window) { return None; }
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::HWND;
@@ -1029,6 +1093,7 @@ fn current_work_area(window: &WebviewWindow, current: PhysicalRect) -> Option<Ph
 
 /// 启动和托盘恢复时按实际工作区限制整窗。
 fn constrain_current(window: &WebviewWindow) -> tauri::Result<()> {
+    if window_mode::suppress_geometry(window) { return Ok(()); }
     let position = window.outer_position()?;
     let size = window.outer_size()?;
     let current = PhysicalRect {

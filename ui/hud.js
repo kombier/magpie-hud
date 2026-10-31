@@ -662,6 +662,7 @@
     if (key === 'claudedesktop') return 'Claude Desktop';
     if (key === 'claude' || key === 'claudecode') return 'Claude Code';
     if (key === 'codex') return 'Codex';
+    if (key === 'zcode') return 'ZCode';
     if (key === 'hermes' || key === 'hermesagent') return 'Hermes Agent';
     const known = { kiro: 'Kiro', cursor: 'Cursor', windsurf: 'Windsurf', codeium: 'Windsurf', trae: 'Trae', qoder: 'Qoder', codebuddy: 'CodeBuddy', roocode: 'Roo Code', roo: 'Roo Code', goose: 'Goose', kilocode: 'Kilo Code', kilo: 'Kilo Code', cline: 'Cline', opencode: 'OpenCode', cherrystudio: 'Cherry Studio', copilot: 'GitHub Copilot', geminicli: 'Gemini CLI', antigravity: 'Antigravity' };
     if (known[key]) return known[key];
@@ -1787,6 +1788,7 @@
     await window.__TAURI__.event.listen('config-error', event => reportError(event.payload));
     const initial = await invoke('startup_state');
     acceptSnapshot(initial.snapshot, false);
+    await window.hudWindowMode.bind({ invoke, listen: window.__TAURI__.event.listen, initial, reportError });
     const pin = byId('pin');
     pin.setAttribute('aria-pressed', String(initial.pinned));
     pin.title = initial.pinned ? '置顶已开启' : '置顶已关闭';
@@ -1812,7 +1814,7 @@
     // 右键不触发任何菜单；输入控件保留系统编辑菜单。
     document.addEventListener('contextmenu', event => { if (!event.target.closest('input,textarea,select')) event.preventDefault(); });
     byId('drag-region').addEventListener('pointerdown', event => {
-      if (event.button === 0 && !event.target.closest('button,select,label')) window.__TAURI__.webviewWindow.getCurrentWebviewWindow().startDragging().catch(reportError);
+      if (hud.dataset.fullscreen !== 'true' && event.button === 0 && !event.target.closest('button,select,label')) window.__TAURI__.webviewWindow.getCurrentWebviewWindow().startDragging().catch(reportError);
     });
   }
 
