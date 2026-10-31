@@ -1914,12 +1914,13 @@ mod tests {
             earliest,
             Some(DateTime::parse_from_rfc3339(&before).unwrap().with_timezone(&Local).date_naive())
         );
-        assert_eq!(days.iter().map(|day| day.requests).sum::<u64>(), 2);
-        assert_eq!(days.iter().map(|day| day.tokens).sum::<u64>(), 250);
+        // 无会话 ID 的真实请求也进入月度用量；分类器与重复记录仍排除。
+        assert_eq!(days.iter().map(|day| day.requests).sum::<u64>(), 3);
+        assert_eq!(days.iter().map(|day| day.tokens).sum::<u64>(), 375);
         let first_usage = days.iter().find(|day| day.date == NaiveDate::from_ymd_opt(2026, 4, 1).unwrap()).unwrap();
         let late_usage = days.iter().find(|day| day.date == NaiveDate::from_ymd_opt(2026, 4, 15).unwrap()).unwrap();
         assert_eq!((first_usage.requests, first_usage.tokens), (1, 125));
-        assert_eq!((late_usage.requests, late_usage.tokens), (1, 125));
+        assert_eq!((late_usage.requests, late_usage.tokens), (2, 250));
         assert!(days
             .iter()
             .filter(|day| day.date != first_usage.date && day.date != late_usage.date)
