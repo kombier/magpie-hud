@@ -50,6 +50,8 @@ pub struct Usage {
     /// 全局小时费用；网关没有会话级序列，不能据此拆分会话。
     #[serde(default, rename = "series")] pub hourly: Vec<HourlyCost>,
     #[serde(default)] pub sessions: Vec<SessionCost>,
+    /// 无会话 ID 的来源，可在来源身份与调用数均明确时使用网关 Agent 汇总。
+    #[serde(default)] pub agents: Vec<SessionCost>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -142,8 +144,12 @@ fn fill_cost(stats: &mut crate::usage::DailyStats, calls: u64, cost: f64, unpric
 }
 
 /// 只在该来源分组自己的每个会话都有唯一、有效的网关费用时填写金额。
-/// 缺一个会话、ID 重复或费用字段无效都保持未知，不用全局今日费用分摊。
+/// 缺会话 ID 时只用唯一 Agent 且调用数一致的汇总；不分摊无法明确归属的费用。
 pub fn apply_agent_usage(groups: &mut [AgentStats], usage: &Usage) {
+    let mut agent_owners = std::collections::HashMap::<String, usize>::new();
+    for group in groups.iter() {
+        *agent_owners.entry(group.agent.clone()).or_default() += 1;
+    }
     let mut counts = std::collections::HashMap::<&str, usize>::new();
     for session in &usage.sessions {
         if session.id.is_empty() {
@@ -156,6 +162,18 @@ pub fn apply_agent_usage(groups: &mut [AgentStats], usage: &Usage) {
         for id in &group.cost_sessions { *owners.entry(id.clone()).or_default() += 1; }
     }
     for group in groups {
+        if group.cost_sessions.iter().any(|id| id.is_empty()) {
+            // Agent 总额不能分摊给多个 caller；调用数不一致也不冒充完整覆盖。
+            if agent_owners.get(&group.agent) == Some(&1) {
+                let mut matches = usage.agents.iter().filter(|item| item.id == group.agent);
+                if let Some(item) = matches.next() {
+                    if matches.next().is_none() && item.calls == group.daily.requests {
+                        fill_cost(&mut group.daily, item.calls, item.cost, item.unpriced);
+                    }
+                }
+            }
+            continue;
+        }
         if group.cost_sessions.is_empty() || group.cost_sessions.iter().any(|id| owners.get(id) != Some(&1)) {
             continue;
         }
@@ -291,6 +309,7 @@ mod tests {
                 unpriced: 1,
             }],
             sessions: vec![],
+            agents: vec![],
         };
         let mut stats = crate::usage::DailyStats::default();
         apply_day_usage(&mut stats, day, &period, &usage).unwrap();
@@ -305,4 +324,42 @@ mod tests {
         assert!(apply_day_usage(&mut rejected, day, &period, &fallback).is_err());
         assert_eq!(rejected.cost, None);
     }
+
+    #[test]
+    fn sessionless_source_cost_requires_unique_agent_and_matching_calls() {
+        let now = chrono::Local::now();
+        let mut ledger = UsageLedger::new(now.date_naive());
+        for id in 1..=2 {
+            ledger.ingest(serde_json::json!({"route_id": id, "t": now.to_rfc3339(),
+                "agent": "hermes", "status": 200, "in": 100, "out": 50}).to_string().as_bytes());
+        }
+        let usage: Usage = serde_json::from_value(serde_json::json!({
+            "since": now.to_rfc3339(), "calls": 2, "cost": 0.25,
+            "agents": [{"id": "hermes", "calls": 2, "cost": 0.25}]
+        })).unwrap();
+        let fresh = ledger.snapshot("h", "ready", None).agent_stats;
+        let mut groups = fresh.clone();
+        apply_agent_usage(&mut groups, &usage);
+        assert_eq!(groups[0].daily.cost, Some(0.25));
+        assert_eq!(groups[0].daily.priced_requests, 2);
+
+        let mut mismatch = usage.clone();
+        mismatch.agents[0].calls = 3;
+        let mut groups = fresh.clone();
+        apply_agent_usage(&mut groups, &mismatch);
+        assert_eq!(groups[0].daily.cost, None);
+
+        let mut duplicate = usage.clone();
+        duplicate.agents.push(duplicate.agents[0].clone());
+        let mut groups = fresh.clone();
+        apply_agent_usage(&mut groups, &duplicate);
+        assert_eq!(groups[0].daily.cost, None);
+
+        let mut groups = vec![fresh[0].clone(), fresh[0].clone()];
+        groups[0].caller_key_id = "caller-a".into();
+        groups[1].caller_key_id = "caller-b".into();
+        apply_agent_usage(&mut groups, &usage);
+        assert!(groups.iter().all(|group| group.daily.cost.is_none()));
+    }
+
 }

@@ -662,6 +662,7 @@
     if (key === 'claudedesktop') return 'Claude Desktop';
     if (key === 'claude' || key === 'claudecode') return 'Claude Code';
     if (key === 'codex') return 'Codex';
+    if (key === 'hermes' || key === 'hermesagent') return 'Hermes Agent';
     const known = { kiro: 'Kiro', cursor: 'Cursor', windsurf: 'Windsurf', codeium: 'Windsurf', trae: 'Trae', qoder: 'Qoder', codebuddy: 'CodeBuddy', roocode: 'Roo Code', roo: 'Roo Code', goose: 'Goose', kilocode: 'Kilo Code', kilo: 'Kilo Code', cline: 'Cline', opencode: 'OpenCode', cherrystudio: 'Cherry Studio', copilot: 'GitHub Copilot', geminicli: 'Gemini CLI', antigravity: 'Antigravity' };
     if (known[key]) return known[key];
     return name || 'Agent 未提供';
@@ -820,6 +821,12 @@
   /** 来源按真实 Agent 合并，图标与 Magpie 上下对齐。 */
   function renderSources(sessions) {
     const agents = new Map();
+    // 来源统计不依赖会话 ID；选择具体会话时才收窄到该会话的来源。
+    if (selector.value === '*') {
+      for (const source of filterAgent(snapshot.agentStats || [])) {
+        agents.set(sourceKey(source), { source, active: false });
+      }
+    }
     for (const session of sessions) {
       const key = sourceKey(session);
       agents.set(key, { source: session, active: Boolean(agents.get(key)?.active) || sessionIsActive(session) });
@@ -1440,7 +1447,11 @@
     }
     renderSources(sessions);
     text('session-count', session ? session.label : `${visibleSessions.length}会话, 显示${sessions.length}个`);
-    byId('source-node').title = [...new Set(sessions.map(sourceLabel))].join('\n');
+    byId('source-node').title = [...sourceViews.keys()].map(key => {
+      const source = sessions.find(item => sourceKey(item) === key)
+        || (snapshot.agentStats || []).find(item => sourceKey(item) === key);
+      return source ? sourceLabel(source) : '';
+    }).filter(Boolean).join('\n');
     routeList.scrollTop = oldScroll;
     byId('empty-route').hidden = sessions.length > 0;
     const inbound = byId('inbound-active');
@@ -1449,7 +1460,13 @@
     inbound.style.opacity = sessions.length ? '1' : '0';
     const picked = sessions.flatMap(item => [primaryCard(item), ...subagentsForView(item, Boolean(session))]).find(card => card.id === selectedCard);
     if (picked) renderNotes([picked.note], sessions.filter(item => item.id === picked.sessionId));
-    else { selectedCard = null; renderNotes(session ? session.notes : selectedAgent !== '*' && sessions.length ? sessions[0].notes : snapshot.notes, sessions); }
+    else {
+      selectedCard = null;
+      const notes = session ? session.notes : selectedAgent === '*' ? snapshot.notes
+        : sessions.length ? sessions[0].notes : [{ time: '--:--:--', kind: '来源统计',
+          text: `${statsScope()} · 暂无可归属会话，请求用量见来源统计` }];
+      renderNotes(notes, sessions);
+    }
     renderedIds = currentIds;
     updateCardTimes();
     fitRouteGroups();

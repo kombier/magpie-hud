@@ -8,6 +8,8 @@ test "$(uname -m)" = arm64
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target-custom}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 
+node --check ui/hud.js
+node tests/source-render.cjs
 cargo test --manifest-path src-tauri/Cargo.toml --lib --locked --target aarch64-apple-darwin
 cargo tauri build --ci --target aarch64-apple-darwin --bundles app -- --locked
 

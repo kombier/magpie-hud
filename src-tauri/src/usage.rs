@@ -407,10 +407,6 @@ impl UsageLedger {
         if value.get("kind").and_then(Value::as_str) == Some("routing") {
             return;
         }
-        // 无会话身份的记录无法准确归属会话，因此不进入账本与 HUD。
-        if string(&value, "session").unwrap_or("").is_empty() {
-            return;
-        }
         let timestamp =
             string(&value, "t").and_then(|text| DateTime::parse_from_rfc3339(text).ok());
         // 无效日期不能正确归入当日，绝不将其计入今日金额或 token。
@@ -512,7 +508,10 @@ impl UsageLedger {
         let mut daily = DailyStats::default();
         for record in &self.records {
             daily.add(record);
-            grouped.entry(&record.session).or_default().push(record);
+            // 缺会话 ID 仍保留真实来源和用量，但不能把无关请求合成一个会话。
+            if !record.session.is_empty() {
+                grouped.entry(&record.session).or_default().push(record);
+            }
         }
         let agent_stats = agent_groups(&self.records);
         let mut sessions = Vec::new();
@@ -711,6 +710,14 @@ impl UsageLedger {
                     },
                 ]
             });
+        if sessions.is_empty() {
+            if let Some(record) = self.records.last() {
+                notes[0] = Note {
+                    time: record.time.clone(), kind: "来源统计".into(),
+                    text: "已有请求用量，尚无可归属的会话标识".into(),
+                };
+            }
+        }
         if file_state == "missing" {
             notes[0].kind = "文件".into();
             notes[0].text = "未检测到 Magpie usage.jsonl，请确认 Magpie 已运行过".into();
@@ -720,7 +727,7 @@ impl UsageLedger {
             "warning"
         } else if file_state == "missing" {
             "missing"
-        } else if sessions.is_empty() {
+        } else if self.records.is_empty() {
             "waiting"
         } else {
             "ready"
@@ -1047,6 +1054,7 @@ fn canonical_agent(agent: &str) -> String {
         "claudedesktop" => "Claude Desktop".into(),
         "claude" | "claudecode" => "Claude Code".into(),
         "codex" => "Codex".into(),
+        "hermes" | "hermesagent" => "Hermes Agent".into(),
         _ => agent.into(),
     }
 }
@@ -1113,7 +1121,7 @@ pub(crate) struct RawHistoryRecord {
     pub ttft_ms: Option<f64>,
 }
 
-/// 履历单行解析结果：坏行计入提示，分类器调用与无会话身份按账本口径忽略。
+/// 履历单行解析结果：坏行计入提示，分类器调用与无会话身份不生成会话履历。
 #[derive(Clone, Debug)]
 pub(crate) enum ParsedHistoryLine {
     Malformed,
@@ -1135,7 +1143,7 @@ pub(crate) fn parse_history_line(line: &[u8]) -> ParsedHistoryLine {
     if value.get("kind").and_then(Value::as_str) == Some("routing") {
         return ParsedHistoryLine::Ignored;
     }
-    // 无会话身份的记录无法准确归属会话，与账本一致直接忽略。
+    // 账本会保留这类来源统计，但无会话身份仍不能生成会话履历。
     let session = string(&value, "session").unwrap_or("");
     if session.is_empty() {
         return ParsedHistoryLine::Ignored;
@@ -1275,7 +1283,7 @@ mod tests {
         assert_eq!(view.sessions[0].routes[0].state, "cancelled");
         assert!(!view.sessions[0].notes[0].text.contains("完成"));
     }
-    /// 缺费用和生成时间保持未知；无 session 的记录彻底排除，保留已标记的短记录。
+    /// 缺费用和生成时间保持未知；无 session 的记录只参与用量，不生成卡片。
     #[test]
     fn missing_fields_and_out_of_order_records_remain_truthful() {
         let mut ledger = ledger();
@@ -1294,24 +1302,48 @@ mod tests {
         assert_eq!(view.sessions[0].routes[0].state, "recovered");
         assert_eq!(view.daily.credits, None);
         assert_eq!(view.daily.tokens_per_second, None);
-        assert_eq!(view.daily.requests, 2);
+        assert_eq!(view.daily.requests, 3);
     }
 
-    /// 所有无会话身份的记录都过滤，不受输出量影响；有身份短记录照常统计。
+    /// 无会话身份仍计入来源、模型和全局统计，不能虚构会话或丢失短输出。
     #[test]
-    fn drops_all_sessionless_records_and_keeps_identified_short_output() {
+    fn counts_sessionless_records_without_creating_sessions() {
         let mut ledger = ledger();
-        ledger.ingest(fixture(1, "", 200).to_string().as_bytes());
+        let mut anonymous = fixture(1, "", 200);
+        anonymous["agent"] = json!("hermes");
+        anonymous.as_object_mut().unwrap().remove("session");
+        ledger.ingest(anonymous.to_string().as_bytes());
+        ledger.ingest(anonymous.to_string().as_bytes());
+        let alone = ledger.snapshot("h", "ready", None);
+        assert!(alone.sessions.is_empty());
+        assert_eq!(alone.state, "ready");
+        assert_eq!(alone.daily.requests, 1);
         let mut long = fixture(2, "", 200);
+        long["agent"] = json!("hermes");
         long["out"] = json!(531);
         ledger.ingest(long.to_string().as_bytes());
         let mut identified = fixture(3, "alpha", 200);
+        identified["agent"] = json!("codex");
         identified["out"] = json!(18);
         ledger.ingest(identified.to_string().as_bytes());
+        let mut routing = fixture(4, "", 200);
+        routing["kind"] = json!("routing");
+        ledger.ingest(routing.to_string().as_bytes());
         let view = ledger.snapshot("h", "ready", None);
         assert_eq!(view.sessions.len(), 1);
         assert_eq!(view.sessions[0].id, "alpha");
-        assert_eq!(view.daily.requests, 1);
+        assert_eq!(view.sessions[0].daily.requests, 1);
+        assert_eq!(view.daily.requests, 3);
+        assert_eq!(view.daily.tokens, 3349);
+        let hermes = view.agent_stats.iter().find(|group| group.agent == "hermes").unwrap();
+        assert_eq!(hermes.daily.requests, 2);
+        assert_eq!(hermes.daily.tokens, 2431);
+        assert_eq!(hermes.cost_sessions, vec![""]);
+        assert_eq!(view.model_usage.iter().filter(|row| row.agent == "hermes").map(|row| row.requests).sum::<u64>(), 2);
+        let costs = ledger.model_cost_rows(None, Some(r#"["Hermes Agent",""]"#), &HashMap::new());
+        assert_eq!(costs.len(), 2);
+        assert!(costs.iter().all(|row| row.session.is_empty()));
+        assert_eq!(ledger.day_stats().0.requests, 3);
     }
 
     /// 子 Agent 只计入会话与全局统计一次，不占据父会话的完成卡片。
