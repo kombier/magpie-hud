@@ -192,11 +192,6 @@ pub fn run() {
             window_mode::build_main_window(app.handle(), &window_config)?;
             setup_window(app.handle())?;
             setup_tray(app.handle())?;
-            #[cfg(target_os = "macos")]
-            {
-                let visible = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
-                app.handle().set_dock_visibility(visible)?;
-            }
             start_watcher(app.handle().clone());
             start_live(app.handle().clone());
             Ok(())
@@ -227,8 +222,7 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
     window.set_always_on_top(config.always_on_top)?;
     constrain_current(&window)?;
     backdrop::apply(&window)?;
-    window.show()?;
-    window.unminimize()?;
+    window_mode::show_window(app, &window)?;
     // 约束可能改变位置；显示后的稳定矩形才是下次启动应恢复的值。
     let _ = remember_window(app);
     let handle = app.clone();
@@ -238,6 +232,8 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
                 let fullscreen = window_mode::observe(&window);
                 let _ = window.emit("fullscreen-changed", fullscreen);
                 if window.is_minimized().unwrap_or(false) {
+                    #[cfg(target_os = "macos")]
+                    sync_dock_policy(&handle);
                     #[cfg(not(target_os = "macos"))]
                     {
                     let _ = window.hide();
@@ -264,6 +260,10 @@ fn setup_window(app: &AppHandle) -> tauri::Result<()> {
         }
         tauri::WindowEvent::Focused(false) => {
             let _ = remember_window(&handle);
+            #[cfg(target_os = "macos")]
+            if handle.get_webview_window("main").is_some_and(|window| window.is_minimized().unwrap_or(false)) {
+                sync_dock_policy(&handle);
+            }
         }
         _ => {}
     });
@@ -282,7 +282,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     {
         let visible = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
-        let dock = tauri::menu::CheckMenuItem::with_id(app, "show-in-dock", "在 Dock 中显示图标", true, visible, None::<&str>)?;
+        let dock = tauri::menu::CheckMenuItem::with_id(app, "show-in-dock", "收起后仍显示 Dock 图标", true, visible, None::<&str>)?;
         menu.insert(&dock, 4)?;
     }
     let tray = tauri::tray::TrayIconBuilder::with_id("main")
@@ -336,13 +336,21 @@ fn toggle_dock_visibility(app: &AppHandle) -> Result<(), String> {
     let previous = runtime.config.show_in_dock;
     let mut config = runtime.config.clone();
     config.show_in_dock = !previous;
-    app.set_dock_visibility(config.show_in_dock).map_err(|error| error.to_string())?;
+    window_mode::sync_dock_visibility(app, config.show_in_dock).map_err(|error| error.to_string())?;
     if let Err(error) = save_config(&config::config_path(), &config) {
-        let _ = app.set_dock_visibility(previous);
+        let _ = window_mode::sync_dock_visibility(app, previous);
         return Err(error);
     }
     runtime.config = config;
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn sync_dock_policy(app: &AppHandle) {
+    let keep = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
+    if let Err(error) = window_mode::sync_dock_visibility(app, keep) {
+        let _ = app.emit("config-error", error.to_string());
+    }
 }
 
 /// 文件事件在 100ms 内合并，最多等待 150ms；一秒兜底检查负责跨日与缺目录恢复。
@@ -616,6 +624,8 @@ async fn open_usage_details(app: AppHandle, context: details::DetailContext) -> 
                 schedule_details_save(&handle);
             }
             tauri::WindowEvent::CloseRequested{..} | tauri::WindowEvent::Focused(false) => {let _=remember_details(&handle);}
+            #[cfg(target_os = "macos")]
+            tauri::WindowEvent::Destroyed => sync_dock_policy(&handle),
             _=>{}
         });
     }
@@ -998,17 +1008,19 @@ fn close_window(app: AppHandle) {
 /// 显示、取消最小化、限制到工作区并聚焦；托盘左键和“显示窗口”共用。
 fn show_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else { return };
-    let _ = window.unminimize();
-    let _ = constrain_current(&window);
-    let _ = window.show();
-    let _ = window.set_focus();
+    if let Err(error) = window_mode::show_window(app, &window) {
+        let _ = app.emit("config-error", error.to_string());
+    }
 }
 
 /// 隐藏前保存最后的正常矩形，避免托盘恢复时回到哨兵位置。
 fn hide_main_window(app: &AppHandle) {
     let _ = remember_window(app);
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
+        let keep = app.state::<Arc<Mutex<Runtime>>>().lock().expect("状态锁损坏").config.show_in_dock;
+        if let Err(error) = window_mode::hide_window(app, &window, keep) {
+            let _ = app.emit("config-error", error.to_string());
+        }
     }
 }
 

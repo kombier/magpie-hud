@@ -16,6 +16,34 @@ pub fn build_main_window(app: &AppHandle, config: &tauri::utils::config::WindowC
 #[derive(Default)]
 pub struct FullscreenTransition(pub AtomicBool);
 
+/// Accessory apps cannot enter AppKit fullscreen. Visible windows use Regular policy.
+pub fn show_window(app: &AppHandle, window: &WebviewWindow) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    app.set_dock_visibility(true)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    window.unminimize()?;
+    crate::constrain_current(window)?;
+    window.show()?;
+    window.set_focus()
+}
+
+pub fn hide_window(app: &AppHandle, window: &WebviewWindow, keep_in_dock: bool) -> tauri::Result<()> {
+    window.hide()?;
+    #[cfg(target_os = "macos")]
+    sync_dock_visibility(app, keep_in_dock)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, keep_in_dock);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn sync_dock_visibility(app: &AppHandle, keep_in_dock: bool) -> tauri::Result<()> {
+    let visible = app.webview_windows().values().any(|window|
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false));
+    app.set_dock_visibility(visible || keep_in_dock)
+}
+
 pub fn observe(window: &WebviewWindow) -> bool {
     let fullscreen = window.is_fullscreen().unwrap_or(false);
     if fullscreen {

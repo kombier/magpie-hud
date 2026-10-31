@@ -36,7 +36,7 @@ pub struct AppConfig {
     pub details_window: Option<WindowPlacement>,
     /// 是否置顶，默认 true。
     pub always_on_top: bool,
-    /// macOS Dock 图标；旧配置默认仅常驻菜单栏。
+    /// macOS 收起窗口后是否仍显示 Dock 图标；可见窗口始终显示以支持原生全屏。
     #[serde(default)]
     pub show_in_dock: bool,
 }

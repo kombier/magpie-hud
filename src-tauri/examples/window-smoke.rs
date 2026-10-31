@@ -14,6 +14,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .manage(magpie_hud_lib::window_mode::FullscreenTransition::default())
         .setup(|app| {
             let mut config = app.config().app.windows.iter().find(|window| window.label == "main")
                 .expect("Missing main window config").clone();
@@ -24,9 +25,7 @@ fn main() {
             let window = magpie_hud_lib::window_mode::build_main_window(app.handle(), &config)?;
             window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>)?;
             window.set_background_color(Some(tauri::window::Color(23, 25, 30, 255)))?;
-            window.show()?;
-            window.set_focus()?;
-            app.handle().set_dock_visibility(false)?;
+            magpie_hud_lib::window_mode::show_window(app.handle(), &window)?;
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let result = (|| -> Result<(), String> {
@@ -38,9 +37,9 @@ fn main() {
                         return Err("Native window controls are not enabled".into());
                     }
                     let mut failures = Vec::new();
-                    for (label, dock, pinned) in [("regular", true, false), ("menu-bar", false, false),
-                                                  ("pinned", true, true), ("menu-bar+pinned", false, true)] {
-                        handle.set_dock_visibility(dock).map_err(|e| e.to_string())?;
+                    for (label, keep_in_dock, pinned) in [("auto-dock", false, false), ("keep-dock", true, false),
+                                                          ("auto-dock+pinned", false, true), ("keep-dock+pinned", true, true)] {
+                        magpie_hud_lib::window_mode::show_window(&handle, &window).map_err(|e| e.to_string())?;
                         window.set_always_on_top(pinned).map_err(|e| e.to_string())?;
                         // Policy changes can drop activation; focus after applying each policy.
                         window.set_focus().map_err(|e| e.to_string())?;
@@ -67,6 +66,9 @@ fn main() {
                         println!("Native restore {label}: result={restored:?}, expected={normal:?}, frame={:?}, requested={:?}",
                             window.outer_size(), window.is_fullscreen());
                         restored?;
+                        magpie_hud_lib::window_mode::hide_window(&handle, &window, keep_in_dock).map_err(|e| e.to_string())?;
+                        wait_for("hide to the menu bar", || !window.is_visible().unwrap_or(true))?;
+                        println!("Native hide {label}: window hidden; keep_in_dock={keep_in_dock}");
                     }
                     if !failures.is_empty() { return Err(format!("Native fullscreen failed in modes: {failures:?}")); }
                     println!("Native macOS fullscreen: all four modes and original frame restoration verified");
