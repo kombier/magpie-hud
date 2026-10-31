@@ -26,7 +26,7 @@ fn main() {
                     .ok_or("Missing native green button")?;
                 println!("Native green control: behavior={:?}, action={:?}, level={}",
                     native.collectionBehavior(), button.action(), native.level());
-                // Invoke the standard control's own action, without replacing its target or selector.
+                // Invoke the actual standard control wired by the production window factory.
                 // SAFETY: no sender, just as for an ordinary programmatic NSControl click.
                 unsafe { button.performClick(None); }
                 Ok(())

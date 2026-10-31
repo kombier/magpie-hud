@@ -3,6 +3,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, WebviewWindow};
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 /// Share the exact production window style with the native macOS smoke check.
 pub fn build_main_window(app: &AppHandle, config: &tauri::utils::config::WindowConfig) -> tauri::Result<WebviewWindow> {
     let builder = tauri::WebviewWindowBuilder::from_config(app, config)?;
@@ -15,15 +18,7 @@ pub fn build_main_window(app: &AppHandle, config: &tauri::utils::config::WindowC
     {
         let owned = window.clone();
         window.run_on_main_thread(move || {
-            use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior as Behavior};
-            let pointer = owned.ns_window().expect("Main window must have an AppKit window");
-            // SAFETY: Tauri owns this NSWindow; `owned` keeps it alive on the AppKit main thread.
-            let native = unsafe { &*pointer.cast::<NSWindow>() };
-            let mut behavior = native.collectionBehavior();
-            behavior.remove(Behavior::FullScreenAuxiliary | Behavior::FullScreenNone);
-            behavior.insert(Behavior::FullScreenPrimary);
-            // Floating HUD windows otherwise expose zoom/fill on the green control.
-            native.setCollectionBehavior(behavior);
+            macos::configure(owned);
         })?;
     }
     Ok(window)
