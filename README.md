@@ -1,6 +1,6 @@
 # magpie-hud
 
-> **自用定制版（`custom` 分支）**：基于上游 1.0.10，程序版本 1.0.16。Mac 使用固定深色背景 `#17191e`，移除原生 HUD 磨砂，避免浅色系统外观下背景发白；Windows 保留上游效果。`main` 分支保持上游原版。构建、更新与恢复方法见[自用版说明](docs/custom-macos.md)。
+> **自用定制版（`custom` 分支）**：基于上游 1.0.10，程序版本 1.0.17。Mac 使用固定深色背景 `#17191e`，移除原生 HUD 磨砂，避免浅色系统外观下背景发白；Windows 保留上游效果。`main` 分支保持上游原版。构建、更新与恢复方法见[自用版说明](docs/custom-macos.md)。
 
 > **当前 `main` 就是这套 Tauri 2 应用。** 克隆后请用 Tauri CLI 2，在项目根目录执行 `cargo tauri dev`（发布包用 `cargo tauri build`）。不要安装 Qt，不要使用 CXX-Qt，也不要运行 `build.ps1`；那是已经替换掉的旧脚手架。
 
@@ -135,7 +135,9 @@ python scripts/verify_routing_window.py
 
 ## 变更记录
 
-当前程序版本是 `1.0.12`，标题显示为 `Magpie HUD V.1.0.12 Custom`。上方截图来自 v0.0.32，保留为实际运行示例。
+2026-11-01 | 1.0.17 Custom | 补齐 magpie 与 Bun 来源图标；保留真实来源名称、分组和用量统计，不改变实际模型调用。
+
+当前程序版本是 `1.0.17`，标题显示为 `Magpie HUD V.1.0.17 Custom`。上方截图来自 v0.0.32，保留为实际运行示例。
 
 2026-11-01 | 1.0.12 Custom | 无会话 ID 的请求保留来源、Token、调用数及模型统计，不生成虚构会话；来源图同时读取 Agent 汇总，补齐 Hermes Agent 名称和图标；无会话来源费用仅在 Agent 唯一且调用数一致时采用网关汇总。
 

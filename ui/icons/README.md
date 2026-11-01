@@ -1,5 +1,7 @@
 # 图标来源
 
+2026-11-01 来源图标：`magpie` 复用本项目已有的 `magpie.svg`；`Bun` 使用 Bun 官方仓库的 [`docs/logo/logo.svg`](https://github.com/oven-sh/bun/blob/1b6d511ab26ec634fe3fc406bb0efcfc5260ae83/docs/logo/logo.svg)，原样保存为 `bun.svg`。Bun 仓库声明自身采用 MIT 许可，品牌权利归原权利人。只匹配网关实际报告的来源名称；Bun 表示运行时名称，不据此推断调用它的应用。
+
 2026-10-29 Devin / SWE-2：`devin-color.svg` 来自 [`@lobehub/icons-static-svg@1.97.0`](https://unpkg.com/@lobehub/icons-static-svg@1.97.0/icons/devin-color.svg)，保留上游彩色 SVG 路径与配色，许可证见本目录 [LICENSE](LICENSE)。SWE-2 模型使用 Devin 品牌图标；Devin 供应商额度和来源也复用此图标。
 
 2026-10-29 自定义来源：`robot.svg` 为本项目绘制的通用机器人图标，用于未知 Agent 来源。匹配规则见 `ui/source-icons.json` 和 [自定义 Agent 接入说明](../../docs/integration/custom-agents.md)。
